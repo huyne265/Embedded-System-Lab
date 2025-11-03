@@ -1,0 +1,12 @@
+main.c:84:5:main	8	static
+main.c:141:6:SystemClock_Config	88	static
+main.c:182:6:system_init	8	static
+main.c:191:6:debug_led	8	static
+main.c:197:6:Y0_led	8	static
+main.c:205:6:Y1_led	8	static
+main.c:213:6:traffic_led	8	static
+main.c:228:6:colon_scan	8	static
+main.c:237:6:clock_cal	4	static
+main.c:266:6:led7_seg	8	static
+main.c:273:6:shift_right	16	static
+main.c:290:6:Error_Handler	4	static,ignoring_inline_asm
