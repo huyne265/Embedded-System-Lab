@@ -1,2 +1,0 @@
-software_timer.c:22:6:setTimer2	16	static
-software_timer.c:34:6:HAL_TIM_PeriodElapsedCallback	16	static
