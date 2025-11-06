@@ -1,0 +1,6 @@
+led7_seg.c:20:6:led7_init	8	static
+led7_seg.c:30:6:led7_Scan	8	static
+led7_seg.c:66:6:led7_SetDigit	24	static
+led7_seg.c:80:6:led7_SetColon	16	static
+led7_seg.c:94:6:led_On	16	static
+led7_seg.c:109:6:led_Off	16	static
