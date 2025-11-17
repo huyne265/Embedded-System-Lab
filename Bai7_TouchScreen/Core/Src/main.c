@@ -38,6 +38,7 @@
 #include "sensor.h"
 #include "buzzer.h"
 #include "touch.h"
+#include "snake.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -60,8 +61,11 @@
 #define INIT 0
 #define DRAW 1
 #define CLEAR 2
+#define START 3
+#define GAME_OVER 4
 
 int draw_Status = INIT;
+int button[4]= {0}; // Up : 0 ; Down: 1; Left: 2; Right: 3
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -209,25 +213,89 @@ void test_LedDebug(){
 
 uint8_t isButtonClear(){
 	if(!touch_IsTouched()) return 0;
+	return touch_GetX() > 60 && touch_GetX() < 180 && touch_GetY() > 80 && touch_GetY() < 130;
+}
+uint8_t isButtonStart(){
+	if(!touch_IsTouched()) return 0;
 	return touch_GetX() > 60 && touch_GetX() < 180 && touch_GetY() > 10 && touch_GetY() < 60;
 }
+uint8_t isButtonUp(){
+	if(!touch_IsTouched()) return 0;
+	return touch_GetX() > 110 && touch_GetX() < 130 && touch_GetY() > 230 && touch_GetY() < 250;
+}
+uint8_t isButtonDown(){
+	if(!touch_IsTouched()) return 0;
+	return touch_GetX() > 110 && touch_GetX() < 130 && touch_GetY() > 270 && touch_GetY() < 290;
+}
+uint8_t isButtonLeft(){
+	if(!touch_IsTouched()) return 0;
+	return touch_GetX() > 80 && touch_GetX() < 100 && touch_GetY() > 250 && touch_GetY() < 270;
+}
+uint8_t isButtonRight(){
+	if(!touch_IsTouched()) return 0;
+	return touch_GetX() > 140 && touch_GetX() < 160 && touch_GetY() > 250 && touch_GetY() < 270;
+}
+
 
 void touchProcess(){
 	switch (draw_Status) {
 		case INIT:
-                // display blue button
+			// display blue button
 			lcd_Fill(60, 10, 180, 60, GBLUE);
-			lcd_ShowStr(90, 20, "CLEAR", RED, BLACK, 24, 1);
+			lcd_ShowStr(90, 20, "START", RED, BLACK, 24, 1);
+
+			lcd_Fill(60, 80, 180, 130, GBLUE);
+			lcd_ShowStr(90, 90, "RESET", RED, BLACK, 24, 1);
+
 			draw_Status = DRAW;
 			break;
 		case DRAW:
 			if(isButtonClear()){
 				draw_Status = CLEAR;
                     // clear board
-				lcd_Fill(0, 60, 240, 320, BLACK);
+				lcd_Fill(0, 0, 240, 320, BLACK);
                     // display green button
 				lcd_Fill(60, 10, 180, 60, GREEN);
-				lcd_ShowStr(90, 20, "CLEAR", RED, BLACK, 24, 1);
+				lcd_ShowStr(90, 20, "RESET", RED, BLACK, 24, 1);
+			}
+			if(isButtonStart()){
+				draw_Status = START;
+				lcd_Fill(0, 0, 240, 320, BLACK);
+
+				game_Init();
+			}
+
+			break;
+		case START:
+			// 240X320
+			lcd_Fill(110, 230, 130, 250, RED);
+			lcd_Fill(110, 270, 130, 290, RED);
+
+			lcd_Fill(80, 250, 100, 270, RED);
+			lcd_Fill(140, 250, 160, 270, RED);
+			if (is_game_over) {
+				lcd_ShowStr(80, 100, "GAME OVER", WHITE, BLACK, 24, 1);
+				if(isButtonClear() || isButtonStart()){
+					draw_Status = CLEAR;
+				}
+				break;
+			}
+			if(isButtonUp() && direction != 1){
+				direction = 0;
+			}
+			else if(isButtonDown() && direction != 0){
+				direction = 1;
+			}
+			else if(isButtonLeft() && direction != 3){
+				direction = 2;
+			}
+			else if(isButtonRight() && direction != 2){
+				direction = 3;
+			}
+			game_tick_counter++;
+			if (game_tick_counter >= SNAKE_SPEED) {
+				game_tick_counter = 0;
+				update_Game();
 			}
 			break;
 		case CLEAR:
