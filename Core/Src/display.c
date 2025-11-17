@@ -1,11 +1,15 @@
 #include "display.h"
 #include <stdlib.h>
+#include <string.h>
 
 #define BUTTON_SCAN_INTERVAL_MS 1
 #define HOLD_TIME_MS 80
 #define REPEAT_TIME_MS 8
 #define HOLD_THRESHOLD (HOLD_TIME_MS / BUTTON_SCAN_INTERVAL_MS)
 #define REPEAT_RATE (REPEAT_TIME_MS / BUTTON_SCAN_INTERVAL_MS)
+
+#define UART_TIMEOUT_MS 10000
+#define UART_MAX_RETRIES 3
 
 uint8_t hour = 0;
 uint8_t min = 0;
@@ -29,6 +33,8 @@ uint8_t position = 0;
 static uint8_t update_step = 0;
 static uint8_t uart_buf[20];
 static uint8_t uart_idx = 0;
+static uint32_t uart_timestamp = 0;
+static uint8_t uart_retry_count = 0;
 
 void initDisplay(int h,int mi, int s, int d,int dd,int m, int y){
 	hour = h; min = mi; sec = s, day = d, date = dd; month = m, year = y;
@@ -213,6 +219,8 @@ void setAlarm(){
 
 	if(button_count[7] == 1){
 		mode = 3;buf = 0;position = 0;
+        update_step = 0;
+        uart_retry_count = 0;
 	}
 
 	if (button_count[11] == 1) {
@@ -253,6 +261,7 @@ void checkAlarm(){
 		}
 	}
 }
+
 static int8_t read_uart_line(void) {
     while (uart_data_available() > 0) {
         int16_t c = uart_read_byte();
@@ -261,22 +270,27 @@ static int8_t read_uart_line(void) {
         if (c == '\b' || c == 127) {
             if (uart_idx > 0) {
                 uart_idx--;
-                uart_Rs232SendBytes((uint8_t*)"\b \b", 3);
             }
             continue;
         }
-
-//        uart_Rs232SendBytes((uint8_t*)&c, 1);
 
         if (c == '\r' || c == '\n') {
             uart_Rs232SendString((uint8_t*)"\r\n");
             if (uart_idx > 0) {
                 uart_buf[uart_idx] = '\0';
                 uart_idx = 0;
+
+                for (int i = 0; i < strlen((char*)uart_buf); i++) {
+                    if (uart_buf[i] < '0' || uart_buf[i] > '9') {
+                        return -1;
+                    }
+                }
                 return 1;
             }
+            continue;
         }
-        else if (c >= '0' && c <= '9') {
+
+        if (c >= ' ' && c <= '~') {
             if (uart_idx < 19) {
                 uart_buf[uart_idx++] = (uint8_t)c;
             }
@@ -285,120 +299,201 @@ static int8_t read_uart_line(void) {
     return 0;
 }
 
+static void abort_uart_update(const char* errorMsg) {
+    uart_Rs232SendString((uint8_t*)errorMsg);
+    lcd_Fill(0, 40, 240, 220, BLACK);
+    lcd_ShowStr(10, 40, (uint8_t*)"UART Error!", RED, BLACK, 16, 0);
+    lcd_ShowStr(10, 60, (uint8_t*)"Timeout 3 retries.", RED, BLACK, 16, 0);
+    HAL_Delay(2500);
+
+    mode = 0;
+    update_step = 0;
+    uart_retry_count = 0;
+    lcd_Fill(0, 40, 240, 220, BLACK);
+}
+
 void uartUpdateMode(void) {
     if (button_count[7] == 1) {
         mode = 0;
         update_step = 0;
+        uart_retry_count = 0;
         lcd_Fill(0, 40, 240, 220, BLACK);
         uart_Rs232SendString((uint8_t*)"\r\nUpdate Canceled.\r\n");
         return;
     }
 
+    int8_t line_status = read_uart_line();
     uint8_t val;
+
+    if ((update_step > 0) && (update_step % 2 == 0)) {
+        if (HAL_GetTick() - uart_timestamp > UART_TIMEOUT_MS) {
+            uart_retry_count++;
+            if (uart_retry_count >= UART_MAX_RETRIES) {
+                abort_uart_update("\r\nTimeout: 3 retries failed. Aborting.\r\n");
+                return;
+            } else {
+                uart_Rs232SendString((uint8_t*)"\r\nNo response. Retrying...\r\n");
+                update_step--;
+            }
+        }
+    }
+
+    if (line_status == -1) {
+        uart_Rs232SendString((uint8_t*)"Invalid input. Only digits are allowed. Please try again.\r\n");
+        update_step--;
+    }
 
     switch (update_step) {
     case 0:
         lcd_Fill(0, 40, 240, 220, BLACK);
         uart_Rs232SendString((uint8_t*)"\r\n--- UART Time Update Mode ---\r\n");
+        uart_retry_count = 0;
         update_step = 1;
-        break;
 
     case 1:
         lcd_ShowStr(10, 40, (uint8_t*)"Updating hours ... ", WHITE, BLACK, 16, 0);
         uart_Rs232SendString((uint8_t*)"Enter Hours (0-23): ");
-        uart_idx = 0;
+        uart_timestamp = HAL_GetTick();
         update_step = 2;
         break;
     case 2:
-        if (read_uart_line()) {
+        if (line_status == 1) {
             val = (uint8_t)atoi((char*)uart_buf);
-            if (val < 24) hour = val;
-            lcd_ShowIntNum(200, 40, hour, 2, GREEN, BLACK, 16);
-            update_step = 3;
+            if (val < 24) {
+                hour = val;
+                lcd_ShowIntNum(200, 40, hour, 2, GREEN, BLACK, 16);
+                uart_retry_count = 0;
+                update_step = 3;
+            } else {
+                uart_Rs232SendString((uint8_t*)"Invalid value. Hours must be 0-23.\r\n");
+                update_step = 1;
+            }
         }
         break;
 
     case 3:
         lcd_ShowStr(10, 60, (uint8_t*)"Updating minutes ...", WHITE, BLACK, 16, 0);
         uart_Rs232SendString((uint8_t*)"Enter Minutes (0-59): ");
+        uart_timestamp = HAL_GetTick();
         update_step = 4;
         break;
     case 4:
-        if (read_uart_line()) {
+        if (line_status == 1) {
             val = (uint8_t)atoi((char*)uart_buf);
-            if (val < 60) min = val;
-            lcd_ShowIntNum(200, 60, min, 2, GREEN, BLACK, 16);
-            update_step = 5;
+            if (val < 60) {
+                min = val;
+                lcd_ShowIntNum(200, 60, min, 2, GREEN, BLACK, 16);
+                uart_retry_count = 0;
+                update_step = 5;
+            } else {
+                uart_Rs232SendString((uint8_t*)"Invalid value. Minutes must be 0-59.\r\n");
+                update_step = 3;
+            }
         }
         break;
 
     case 5:
         lcd_ShowStr(10, 80, (uint8_t*)"Updating seconds ...", WHITE, BLACK, 16, 0);
         uart_Rs232SendString((uint8_t*)"Enter Seconds (0-59): ");
+        uart_timestamp = HAL_GetTick();
         update_step = 6;
         break;
     case 6:
-        if (read_uart_line()) {
+        if (line_status == 1) {
             val = (uint8_t)atoi((char*)uart_buf);
-            if (val < 60) sec = val;
-            lcd_ShowIntNum(200, 80, sec, 2, GREEN, BLACK, 16);
-            update_step = 7;
+            if (val < 60) {
+                sec = val;
+                lcd_ShowIntNum(200, 80, sec, 2, GREEN, BLACK, 16);
+                uart_retry_count = 0;
+                update_step = 7;
+            } else {
+                uart_Rs232SendString((uint8_t*)"Invalid value. Seconds must be 0-59.\r\n");
+                update_step = 5;
+            }
         }
         break;
 
     case 7:
         lcd_ShowStr(10, 100, (uint8_t*)"Updating day ...", WHITE, BLACK, 16, 0);
         uart_Rs232SendString((uint8_t*)"Enter Day (1-7): ");
+        uart_timestamp = HAL_GetTick();
         update_step = 8;
         break;
     case 8:
-        if (read_uart_line()) {
+        if (line_status == 1) {
             val = (uint8_t)atoi((char*)uart_buf);
-            if (val >= 1 && val <= 7) day = val;
-            lcd_ShowIntNum(200, 100, day, 2, GREEN, BLACK, 16);
-            update_step = 9;
+            if (val >= 1 && val <= 7) {
+                day = val;
+                lcd_ShowIntNum(200, 100, day, 2, GREEN, BLACK, 16);
+                uart_retry_count = 0;
+                update_step = 9;
+            } else {
+                uart_Rs232SendString((uint8_t*)"Invalid value. Day must be 1-7.\r\n");
+                update_step = 7;
+            }
         }
         break;
 
     case 9:
         lcd_ShowStr(10, 120, (uint8_t*)"Updating date ...", WHITE, BLACK, 16, 0);
         uart_Rs232SendString((uint8_t*)"Enter Date (1-31): ");
+        uart_timestamp = HAL_GetTick();
         update_step = 10;
         break;
     case 10:
-        if (read_uart_line()) {
+        if (line_status == 1) {
             val = (uint8_t)atoi((char*)uart_buf);
-            if (val >= 1 && val <= 31) date = val;
-            lcd_ShowIntNum(200, 120, date, 2, GREEN, BLACK, 16);
-            update_step = 11;
+            if (val >= 1 && val <= 31) {
+                date = val;
+                lcd_ShowIntNum(200, 120, date, 2, GREEN, BLACK, 16);
+                uart_retry_count = 0;
+                update_step = 11;
+            } else {
+                uart_Rs232SendString((uint8_t*)"Invalid value. Date must be 1-31.\r\n");
+                update_step = 9;
+            }
         }
         break;
 
     case 11:
         lcd_ShowStr(10, 140, (uint8_t*)"Updating month ...", WHITE, BLACK, 16, 0);
         uart_Rs232SendString((uint8_t*)"Enter Month (1-12): ");
+        uart_timestamp = HAL_GetTick();
         update_step = 12;
         break;
     case 12:
-        if (read_uart_line()) {
+        if (line_status == 1) {
             val = (uint8_t)atoi((char*)uart_buf);
-            if (val >= 1 && val <= 12) month = val;
-            lcd_ShowIntNum(200, 140, month, 2, GREEN, BLACK, 16);
-            update_step = 13;
+            if (val >= 1 && val <= 12) {
+                month = val;
+                lcd_ShowIntNum(200, 140, month, 2, GREEN, BLACK, 16);
+                uart_retry_count = 0;
+                update_step = 13;
+            } else {
+                uart_Rs232SendString((uint8_t*)"Invalid value. Month must be 1-12.\r\n");
+                update_step = 11;
+            }
         }
         break;
 
     case 13:
         lcd_ShowStr(10, 160, (uint8_t*)"Updating year ...", WHITE, BLACK, 16, 0);
         uart_Rs232SendString((uint8_t*)"Enter Year (0-99): ");
+        uart_timestamp = HAL_GetTick();
         update_step = 14;
         break;
     case 14:
-        if (read_uart_line()) {
+        if (line_status == 1) {
             val = (uint8_t)atoi((char*)uart_buf);
-            if (val < 100) year = val;
-            lcd_ShowIntNum(200, 160, year, 2, GREEN, BLACK, 16);
-            update_step = 15;
+            if (val < 100) {
+                year = val;
+                lcd_ShowIntNum(200, 160, year, 2, GREEN, BLACK, 16);
+                uart_retry_count = 0;
+                update_step = 15;
+            } else {
+                uart_Rs232SendString((uint8_t*)"Invalid value. Year must be 0-99.\r\n");
+                update_step = 13;
+            }
         }
         break;
 
@@ -414,6 +509,7 @@ void uartUpdateMode(void) {
         uart_Rs232SendString((uint8_t*)"Save complete. Exiting.\r\n");
         mode = 0;
         update_step = 0;
+        uart_retry_count = 0;
         lcd_Fill(0, 40, 240, 220, BLACK);
         break;
     }
