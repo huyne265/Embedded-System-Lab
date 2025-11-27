@@ -1,0 +1,9 @@
+display.c:51:17:scale_power_to_y	24	static
+display.c:59:13:display_DrawGraph	40	static
+display.c:77:13:display_DrawStaticLayout	24	static
+display.c:90:13:display_ReadAndProcessSensors	24	static
+display.c:107:13:display_UpdateLCD	32	static
+display.c:144:13:display_CheckAlarmState	8	static
+display.c:156:13:display_ExecuteAlarmAction	8	static
+display.c:161:6:display_Init	16	static
+display.c:178:6:display_Run	16	static
