@@ -61,8 +61,8 @@ all: main-build
 main-build: Bai7_TouchScreen.elf secondary-outputs
 
 # Tool invocations
-Bai7_TouchScreen.elf: $(OBJS) $(USER_OBJS) C:\Users\a5159165\Documents\HTN\BKIT_ARM4_Bai7_TouchScreen\Bai7_TouchScreen\STM32F407ZGTX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "Bai7_TouchScreen.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\a5159165\Documents\HTN\BKIT_ARM4_Bai7_TouchScreen\Bai7_TouchScreen\STM32F407ZGTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Bai7_TouchScreen.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Bai7_TouchScreen.elf: $(OBJS) $(USER_OBJS) C:\Users\a5159165\Documents\HTN\Lab7\Lab7\STM32F407ZGTX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "Bai7_TouchScreen.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\a5159165\Documents\HTN\Lab7\Lab7\STM32F407ZGTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Bai7_TouchScreen.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

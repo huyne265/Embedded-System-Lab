@@ -24,7 +24,7 @@
 #define GRID_WIDTH 24
 #define GRID_HEIGHT 22
 
-#define SNAKE_SPEED 4 	// 4 * 50ms
+#define SNAKE_SPEED 20 	// 4 * 50ms
 
 #define SNAKE_HEAD_COLOR CYAN
 #define SNAKE_BODY_COLOR WHITE
